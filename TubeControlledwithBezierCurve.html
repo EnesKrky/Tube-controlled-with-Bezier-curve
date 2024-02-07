@@ -1,0 +1,449 @@
+<canvas id="canvas"></canvas>
+<script>
+    var c=document.getElementById("canvas");
+    var ctx=c.getContext("2d");
+    ctx.canvas.width=window.innerWidth-20;
+    ctx.canvas.height=window.innerHeight-20;
+    var canvas_x=ctx.canvas.width;
+    var canvas_y=ctx.canvas.height;
+    var minlen=Math.min(canvas_x,canvas_y);
+
+    let camera=[[2,-10,2],[0,3,0],[1,0,0],[0,0,1],[2,2,2]]; // position,mainvec,normalvec1,normalvec2,rotationpoint
+    let points=[[[0,0,0],[1,0,0]],[[0,0,0],[0,1,0]],[[0,0,0],[0,0,1]]]; // set1,set2... -> point1,point2...
+    let calculatedallpoints=[];
+    let ischanging=true;
+
+    let control1=false;
+    let control2=false;
+    let control3=false;
+    let control4=false;
+    let control5=false;
+    let linecontrol=false;
+    let pointmotioncontrol=false;
+    let pancontrol=false;
+
+    let tubepoints=[[1,7,3.5],[2,3,3],[1,2,2],[2,-0.3,0.5],[3,2,-1]];
+    let tubevectors=[[1,-1,-1],[0,-1,0],[1,-1,-1],[0,-0.1,-1],[1,0,0]];
+    let controllerlengths=[1,[1,1],[1,1],[1.2,1],1];
+    let centervectors=[];
+    let radius=0.15;
+
+    let index=[];
+
+    let len1=points.length;
+
+    for(let i=0;i<tubepoints.length;i++){
+        pointlist=[];
+        if(i==0){
+            pointlist.push(tubepoints[i]);
+            pointlist.push([tubepoints[0][0]+tubevectors[0][0]*controllerlengths[0],tubepoints[0][1]+tubevectors[0][1]*controllerlengths[0],tubepoints[0][2]+tubevectors[0][2]*controllerlengths[0]]);
+        }
+        else if(i==tubepoints.length-1){
+            pointlist.push(tubepoints[i]);
+            pointlist.push([tubepoints[i][0]-tubevectors[i][0]*controllerlengths[i],tubepoints[i][1]-tubevectors[i][1]*controllerlengths[i],tubepoints[i][2]-tubevectors[i][2]*controllerlengths[i]]);
+        }
+        else{
+            pointlist.push([tubepoints[i][0]-tubevectors[i][0]*controllerlengths[i][0],tubepoints[i][1]-tubevectors[i][1]*controllerlengths[i][0],tubepoints[i][2]-tubevectors[i][2]*controllerlengths[i][0]]);
+            pointlist.push(tubepoints[i]);
+            pointlist.push([tubepoints[i][0]+tubevectors[i][0]*controllerlengths[i][1],tubepoints[i][1]+tubevectors[i][1]*controllerlengths[i][1],tubepoints[i][2]+tubevectors[i][2]*controllerlengths[i][1]]);
+        }
+        points.push(pointlist);
+    }
+
+    let len2=points.length;
+
+    function tubecenterline(deltaT){
+        let A,B,P1,P2,P3,D1,D2;
+        let curvepoints=[];
+        for(let i=0;i<tubepoints.length-1;i++){
+            for(let t=0;t<1;t+=deltaT){
+                if(i==0){
+                    A=[tubepoints[0][0]+tubevectors[0][0]*controllerlengths[0],tubepoints[0][1]+tubevectors[0][1]*controllerlengths[0],tubepoints[0][2]+tubevectors[0][2]*controllerlengths[0]];
+                    B=[tubepoints[1][0]-tubevectors[1][0]*controllerlengths[1][0],tubepoints[1][1]-tubevectors[1][1]*controllerlengths[1][0],tubepoints[1][2]-tubevectors[1][2]*controllerlengths[1][0]];
+                    P1=[(A[0]-tubepoints[0][0])*t+tubepoints[0][0],(A[1]-tubepoints[0][1])*t+tubepoints[0][1],(A[2]-tubepoints[0][2])*t+tubepoints[0][2]];
+                    P2=[(B[0]-A[0])*t+A[0],(B[1]-A[1])*t+A[1],(B[2]-A[2])*t+A[2]];
+                    P3=[(tubepoints[1][0]-B[0])*t+B[0],(tubepoints[1][1]-B[1])*t+B[1],(tubepoints[1][2]-B[2])*t+B[2]];
+                    D1=[(P2[0]-P1[0])*t+P1[0],(P2[1]-P1[1])*t+P1[1],(P2[2]-P1[2])*t+P1[2]];
+                    D2=[(P3[0]-P2[0])*t+P2[0],(P3[1]-P2[1])*t+P2[1],(P3[2]-P2[2])*t+P2[2]];
+                    curvepoints.push([(D2[0]-D1[0])*t+D1[0],(D2[1]-D1[1])*t+D1[1],(D2[2]-D1[2])*t+D1[2]]);
+                }
+                else if(i>0 && i<tubepoints.length-2){
+                    A=[tubepoints[i][0]+tubevectors[i][0]*controllerlengths[i][1],tubepoints[i][1]+tubevectors[i][1]*controllerlengths[i][1],tubepoints[i][2]+tubevectors[i][2]*controllerlengths[i][1]];
+                    B=[tubepoints[i+1][0]-tubevectors[i+1][0]*controllerlengths[i+1][0],tubepoints[i+1][1]-tubevectors[i+1][1]*controllerlengths[i+1][0],tubepoints[i+1][2]-tubevectors[i+1][2]*controllerlengths[i+1][0]];
+                    P1=[(A[0]-tubepoints[i][0])*t+tubepoints[i][0],(A[1]-tubepoints[i][1])*t+tubepoints[i][1],(A[2]-tubepoints[i][2])*t+tubepoints[i][2]];
+                    P2=[(B[0]-A[0])*t+A[0],(B[1]-A[1])*t+A[1],(B[2]-A[2])*t+A[2]];
+                    P3=[(tubepoints[i+1][0]-B[0])*t+B[0],(tubepoints[i+1][1]-B[1])*t+B[1],(tubepoints[i+1][2]-B[2])*t+B[2]];
+                    D1=[(P2[0]-P1[0])*t+P1[0],(P2[1]-P1[1])*t+P1[1],(P2[2]-P1[2])*t+P1[2]];
+                    D2=[(P3[0]-P2[0])*t+P2[0],(P3[1]-P2[1])*t+P2[1],(P3[2]-P2[2])*t+P2[2]];
+                    curvepoints.push([(D2[0]-D1[0])*t+D1[0],(D2[1]-D1[1])*t+D1[1],(D2[2]-D1[2])*t+D1[2]]);
+                }
+                else{
+                    A=[tubepoints[i][0]+tubevectors[i][0]*controllerlengths[i][1],tubepoints[i][1]+tubevectors[i][1]*controllerlengths[i][1],tubepoints[i][2]+tubevectors[i][2]*controllerlengths[i][1]];
+                    B=[tubepoints[i+1][0]-tubevectors[i+1][0]*controllerlengths[i+1],tubepoints[i+1][1]-tubevectors[i+1][1]*controllerlengths[i+1],tubepoints[i+1][2]-tubevectors[i+1][2]*controllerlengths[i+1]];
+                    P1=[(A[0]-tubepoints[i][0])*t+tubepoints[i][0],(A[1]-tubepoints[i][1])*t+tubepoints[i][1],(A[2]-tubepoints[i][2])*t+tubepoints[i][2]];
+                    P2=[(B[0]-A[0])*t+A[0],(B[1]-A[1])*t+A[1],(B[2]-A[2])*t+A[2]];
+                    P3=[(tubepoints[i+1][0]-B[0])*t+B[0],(tubepoints[i+1][1]-B[1])*t+B[1],(tubepoints[i+1][2]-B[2])*t+B[2]];
+                    D1=[(P2[0]-P1[0])*t+P1[0],(P2[1]-P1[1])*t+P1[1],(P2[2]-P1[2])*t+P1[2]];
+                    D2=[(P3[0]-P2[0])*t+P2[0],(P3[1]-P2[1])*t+P2[1],(P3[2]-P2[2])*t+P2[2]];
+                    curvepoints.push([(D2[0]-D1[0])*t+D1[0],(D2[1]-D1[1])*t+D1[1],(D2[2]-D1[2])*t+D1[2]]);
+                }
+                if(t==0){
+                    centervectors.push(tubevectors[i]);
+                }
+                else{
+                    centervectors.push([curvepoints[curvepoints.length-1][0]-curvepoints[curvepoints.length-2][0],curvepoints[curvepoints.length-1][1]-curvepoints[curvepoints.length-2][1],curvepoints[curvepoints.length-1][2]-curvepoints[curvepoints.length-2][2]]);
+                }
+            }
+        }
+        curvepoints.push(tubepoints[tubepoints.length-1]);
+        centervectors.push(tubevectors[tubevectors.length-1]);
+        points.push(curvepoints);
+        return curvepoints;
+    }
+    let centerpoints=tubecenterline(0.05);
+
+    function crossproduct(vec1,vec2){
+        return [vec1[1]*vec2[2]-vec1[2]*vec2[1],vec1[2]*vec2[0]-vec1[0]*vec2[2],vec1[0]*vec2[1]-vec1[1]*vec2[0]];
+    }
+
+    function tubeprofile(pointnumberpercircle){
+        let P1,P2,V1,V2,V1L,V2L,v1,v2,theta;
+        let linepoints=[],grouppoints=[];
+        for(let k=0;k<pointnumberpercircle;k++){
+            V1=crossproduct(centervectors[0],camera[1]);
+            if(V1[0]**2+V1[1]**2+V1[2]**2==0){
+                V1=crossproduct(centervectors[0],camera[2]);
+            }
+            V2=crossproduct(centervectors[0],V1);
+            V1L=(V1[0]**2+V1[1]**2+V1[2]**2)**0.5;
+            V2L=(V2[0]**2+V2[1]**2+V2[2]**2)**0.5;
+            v1=[V1[0]/V1L,V1[1]/V1L,V1[2]/V1L];
+            v2=[V2[0]/V2L,V2[1]/V2L,V2[2]/V2L];
+            P2=[centerpoints[0][0]+v1[0]*radius*Math.cos(k/pointnumberpercircle*2*Math.PI)+v2[0]*radius*Math.sin(k/pointnumberpercircle*2*Math.PI),centerpoints[0][1]+v1[1]*radius*Math.cos(k/pointnumberpercircle*2*Math.PI)+v2[1]*radius*Math.sin(k/pointnumberpercircle*2*Math.PI),centerpoints[0][2]+v1[2]*radius*Math.cos(k/pointnumberpercircle*2*Math.PI)+v2[2]*radius*Math.sin(k/pointnumberpercircle*2*Math.PI)];
+            linepoints.push(P2);
+            for(let i=1;i<centerpoints.length;i++){
+                V1=crossproduct(centervectors[i],camera[1]);
+                if(V1[0]**2+V1[1]**2+V1[2]**2==0){
+                    V1=crossproduct(centervectors[i],camera[2]);
+                }
+                V2=crossproduct(centervectors[i],V1);
+                V1L=(V1[0]**2+V1[1]**2+V1[2]**2)**0.5;
+                V2L=(V2[0]**2+V2[1]**2+V2[2]**2)**0.5;
+                v1=[V1[0]/V1L,V1[1]/V1L,V1[2]/V1L];
+                v2=[V2[0]/V2L,V2[1]/V2L,V2[2]/V2L];
+                theta=Math.atan2(v2[0]*(P2[0]-centerpoints[i][0])+v2[1]*(P2[1]-centerpoints[i][1])+v2[2]*(P2[2]-centerpoints[i][2]),v1[0]*(P2[0]-centerpoints[i][0])+v1[1]*(P2[1]-centerpoints[i][1])+v1[2]*(P2[2]-centerpoints[i][2]));
+                P2=[centerpoints[i][0]+radius*Math.cos(theta)*v1[0]+radius*Math.sin(theta)*v2[0],centerpoints[i][1]+radius*Math.cos(theta)*v1[1]+radius*Math.sin(theta)*v2[1],centerpoints[i][2]+radius*Math.cos(theta)*v1[2]+radius*Math.sin(theta)*v2[2]];
+                linepoints.push(P2);
+            }
+        }
+        for(let h=0;h<pointnumberpercircle;h++){
+            for(let j=0;j<centerpoints.length;j++){
+                grouppoints.push(linepoints[h*centerpoints.length+j]);
+            }
+            points.push(grouppoints);
+            grouppoints=[];
+        }
+        for(let j=0;j<centerpoints.length;j++){
+            for(let h=0;h<pointnumberpercircle;h++){
+                grouppoints.push(linepoints[h*centerpoints.length+j]);
+            }
+            grouppoints.push(linepoints[j]);
+            points.push(grouppoints);
+            grouppoints=[];
+        }
+    }
+    tubeprofile(15);
+
+    function points2D(){
+        calculatedallpoints=[];
+        let calculatedpoints=[];
+        let a,b,c,d,e,f,g,h,j,K,L,M,det,vector1,t,k,s;
+        for(let i=0;i<points.length;i++){
+            calculatedpoints=[];
+            for(let z=0;z<points[i].length;z++){
+                vector1=[points[i][z][0]-camera[0][0],points[i][z][1]-camera[0][1],points[i][z][2]-camera[0][2]];
+                a=camera[2][0];b=camera[3][0];c=-vector1[0];
+                d=camera[2][1];e=camera[3][1];f=-vector1[1];
+                g=camera[2][2];h=camera[3][2];j=-vector1[2];
+                K=-camera[1][0];L=-camera[1][1];M=-camera[1][2];
+                det=c*d*h+b*g*f+a*e*j-c*e*g-f*a*h-b*d*j;
+                if(det!=0){
+                    t=((e*j-h*f)*K+(h*c-j*b)*L+(f*b-c*e)*M)/det;
+                    k=((g*f-j*d)*K+(a*j-c*g)*L+(c*d-a*f)*M)/det;
+                    s=((h*d-e*g)*K+(b*g-h*a)*L+(a*e-b*d)*M)/det;
+                    if(s>0 && t<=1.5*canvas_x/minlen && t>-1.5*canvas_x/minlen && k<=1.5*canvas_y/minlen && k>-1.5*canvas_y/minlen){
+                        calculatedpoints.push([canvas_x/2+t*minlen/2,canvas_y/2-k*minlen/2]);
+                    }
+                    else{
+                        calculatedpoints.push(null);
+                    }
+                }
+                else{
+                    calculatedpoints.push(null);
+                }
+            }
+            calculatedallpoints.push(calculatedpoints);
+        }
+    }
+
+    function rotation(refpoint,refvec,rotpoint,rotangle){
+        let t=(refvec[0]*(rotpoint[0]-refpoint[0])+refvec[1]*(rotpoint[1]-refpoint[1])+refvec[2]*(rotpoint[2]-refpoint[2]))/(refvec[0]**2+refvec[1]**2+refvec[2]**2);
+        let rotvecx=[rotpoint[0]-(refpoint[0]+t*refvec[0]),rotpoint[1]-(refpoint[1]+t*refvec[1]),rotpoint[2]-(refpoint[2]+t*refvec[2])];
+        let rotvecy=[refvec[1]*rotvecx[2]-refvec[2]*rotvecx[1],refvec[2]*rotvecx[0]-refvec[0]*rotvecx[2],refvec[0]*rotvecx[1]-refvec[1]*rotvecx[0]];
+        let lengthvecx=(rotvecx[0]**2+rotvecx[1]**2+rotvecx[2]**2)**0.5;
+        let lengthvecy=(rotvecy[0]**2+rotvecy[1]**2+rotvecy[2]**2)**0.5;
+        return [refpoint[0]+t*refvec[0]+Math.cos(rotangle*Math.PI/180)*rotvecx[0]+lengthvecx/lengthvecy*Math.sin(rotangle*Math.PI/180)*rotvecy[0],refpoint[1]+t*refvec[1]+Math.cos(rotangle*Math.PI/180)*rotvecx[1]+lengthvecx/lengthvecy*Math.sin(rotangle*Math.PI/180)*rotvecy[1],refpoint[2]+t*refvec[2]+Math.cos(rotangle*Math.PI/180)*rotvecx[2]+lengthvecx/lengthvecy*Math.sin(rotangle*Math.PI/180)*rotvecy[2]];
+    }
+
+    function camerarotation(refvec,rotangle){
+        let newpos=rotation(camera[4],refvec,camera[0],rotangle);
+        let vec=rotation(camera[4],refvec,[camera[0][0]+camera[1][0],camera[0][1]+camera[1][1],camera[0][2]+camera[1][2]],rotangle);
+        let newvec=[vec[0]-newpos[0],vec[1]-newpos[1],vec[2]-newpos[2]];
+        let normalpoint1=rotation(camera[4],refvec,[camera[0][0]+camera[2][0],camera[0][1]+camera[2][1],camera[0][2]+camera[2][2]],rotangle);
+        let newnormal1=[normalpoint1[0]-newpos[0],normalpoint1[1]-newpos[1],normalpoint1[2]-newpos[2]];
+        let normalpoint2=rotation(camera[4],refvec,[camera[0][0]+camera[3][0],camera[0][1]+camera[3][1],camera[0][2]+camera[3][2]],rotangle);
+        let newnormal2=[normalpoint2[0]-newpos[0],normalpoint2[1]-newpos[1],normalpoint2[2]-newpos[2]];
+        camera=[newpos,newvec,newnormal1,newnormal2,camera[4]];
+    }
+
+    function update(){
+        if(window.innerWidth-20!=canvas_x){
+            ctx.canvas.width=window.innerWidth-20;
+            canvas_x=ctx.canvas.width;
+            minlen=Math.min(canvas_x,canvas_y);
+            ischanging=true;
+        }
+        if(window.innerHeight-20!=canvas_y){
+            ctx.canvas.height=window.innerHeight-20;
+            canvas_y=ctx.canvas.height;
+            minlen=Math.min(canvas_x,canvas_y);
+            ischanging=true;
+        }
+        c.addEventListener("mousedown",(event)=>{
+            event.preventDefault();
+            if(event.button==0 && !control1 && !control2 && !pointmotioncontrol){
+                index=[];
+                pointindices=[];
+                pointdistances=[];
+                control1=true;
+                for(let i=len1;i<len2;i++){
+                    for(let k=0;k<calculatedallpoints[i].length;k++){
+                        if(calculatedallpoints[i][k]!=null){
+                            if(((event.clientX-calculatedallpoints[i][k][0])**2+(event.clientY-calculatedallpoints[i][k][1])**2)**0.5<=12){
+                                pointindices.push([i,k]);
+                                pointdistances.push(((points[i][k][0]-camera[0][0])**2+(points[i][k][1]-camera[0][1])**2+(points[i][k][2]-camera[0][2])**2)**0.5);
+                            }
+                        }
+                    }
+                }
+                if(pointindices.length==1){
+                    xpos0=event.clientX;
+                    ypos0=event.clientY;
+                    index=pointindices[0];
+                    pointmotioncontrol=true;
+                    document.body.style.cursor="pointer";
+                }
+                else if(pointindices.length>1){
+                    xpos0=event.clientX;
+                    ypos0=event.clientY;
+                    index=pointindices[pointdistances.indexOf(Math.min(...pointdistances))];
+                    pointmotioncontrol=true;
+                    document.body.style.cursor="pointer";
+                }
+                else{
+                    control2=true;
+                    document.body.style.cursor="move";
+                }
+            }
+            else if(event.button==1 && !control1 && !pancontrol){
+                pancontrol=true;
+                control1=true;
+                document.body.style.cursor="move";
+            }
+        },false);
+        c.addEventListener("mousemove",(event)=>{
+            event.preventDefault();
+            if(control2 && !control3){
+                let ydir=event.movementY;
+                let xdir=event.movementX;
+                let len=(ydir**2+xdir**2)**0.5;
+                let rotationvector=[-ydir*camera[2][0]/len-xdir*camera[3][0]/len,-ydir*camera[2][1]/len-xdir*camera[3][1]/len,-ydir*camera[2][2]/len-xdir*camera[3][2]/len];
+                let rotationangle=len/5;
+                if((rotationvector[0]**2+rotationvector[1]**2+rotationvector[2]**2)**0.5){
+                    camerarotation(rotationvector,rotationangle);
+                    ischanging=true;
+                }
+                control3=true;
+            }
+            else if(pointmotioncontrol && !control3){
+                let xpos=event.clientX;
+                let ypos=event.clientY;
+                let ydir=ypos-ypos0;
+                let xdir=xpos-xpos0;
+                if((xdir**2+ydir**2)**0.5){
+                    points[index[0]][index[1]]=[points[index[0]][index[1]][0]+xdir*camera[2][0]/minlen*2-ydir*camera[3][0]/minlen*2,points[index[0]][index[1]][1]+xdir*camera[2][1]/minlen*2-ydir*camera[3][1]/minlen*2,points[index[0]][index[1]][2]+xdir*camera[2][2]/minlen*2-ydir*camera[3][2]/minlen*2];;
+                    if(index[0]==len1){
+                        if(index[1]==0){
+                            tubepoints[0]=points[index[0]][0];
+                            points[index[0]][1]=[points[index[0]][0][0]+tubevectors[0][0]*controllerlengths[0],points[index[0]][0][1]+tubevectors[0][1]*controllerlengths[0],points[index[0]][0][2]+tubevectors[0][2]*controllerlengths[0]];
+                        }
+                        else{
+                            tubevectors[0]=[(points[index[0]][1][0]-tubepoints[0][0])/controllerlengths[0],(points[index[0]][1][1]-tubepoints[0][1])/controllerlengths[0],(points[index[0]][1][2]-tubepoints[0][2])/controllerlengths[0]];
+                        }
+                    }
+                    else if(index[0]==len2-1){
+                        if(index[1]==0){
+                            tubepoints[len2-1-len1]=points[index[0]][0];
+                            points[index[0]][1]=[points[index[0]][0][0]-tubevectors[len2-1-len1][0]*controllerlengths[len2-1-len1],points[index[0]][0][1]-tubevectors[len2-1-len1][1]*controllerlengths[len2-1-len1],points[index[0]][0][2]-tubevectors[len2-1-len1][2]*controllerlengths[len2-1-len1]];
+                    
+                        }
+                        else{
+                            tubevectors[len2-1-len1]=[(tubepoints[len2-1-len1][0]-points[index[0]][1][0])/controllerlengths[len2-1-len1],(tubepoints[len2-1-len1][1]-points[index[0]][1][1])/controllerlengths[len2-1-len1],(tubepoints[len2-1-len1][2]-points[index[0]][1][2])/controllerlengths[len2-1-len1]];
+                        }
+                    }
+                    else if(index[0]!=len1 && index[0]!=len2-1){
+                        if(index[1]==1){
+                            tubepoints[index[0]-len1]=points[index[0]][1];
+                            points[index[0]][0]=[points[index[0]][1][0]-tubevectors[index[0]-len1][0]*controllerlengths[index[0]-len1][0],points[index[0]][1][1]-tubevectors[index[0]-len1][1]*controllerlengths[index[0]-len1][0],points[index[0]][1][2]-tubevectors[index[0]-len1][2]*controllerlengths[index[0]-len1][0]];
+                            points[index[0]][2]=[points[index[0]][1][0]+tubevectors[index[0]-len1][0]*controllerlengths[index[0]-len1][1],points[index[0]][1][1]+tubevectors[index[0]-len1][1]*controllerlengths[index[0]-len1][1],points[index[0]][1][2]+tubevectors[index[0]-len1][2]*controllerlengths[index[0]-len1][1]];
+                        }
+                        else if(index[1]==0){
+                            tubevectors[index[0]-len1]=[(tubepoints[index[0]-len1][0]-points[index[0]][0][0])/controllerlengths[index[0]-len1][0],(tubepoints[index[0]-len1][1]-points[index[0]][0][1])/controllerlengths[index[0]-len1][0],(tubepoints[index[0]-len1][2]-points[index[0]][0][2])/controllerlengths[index[0]-len1][0]];
+                            points[index[0]][2]=[tubepoints[index[0]-len1][0]+tubevectors[index[0]-len1][0]*controllerlengths[index[0]-len1][1],tubepoints[index[0]-len1][1]+tubevectors[index[0]-len1][1]*controllerlengths[index[0]-len1][1],tubepoints[index[0]-len1][2]+tubevectors[index[0]-len1][2]*controllerlengths[index[0]-len1][1]];
+                        }
+                        else{
+                            tubevectors[index[0]-len1]=[(points[index[0]][2][0]-tubepoints[index[0]-len1][0])/controllerlengths[index[0]-len1][1],(points[index[0]][2][1]-tubepoints[index[0]-len1][1])/controllerlengths[index[0]-len1][1],(points[index[0]][2][2]-tubepoints[index[0]-len1][2])/controllerlengths[index[0]-len1][1]];
+                            points[index[0]][0]=[tubepoints[index[0]-len1][0]-tubevectors[index[0]-len1][0]*controllerlengths[index[0]-len1][0],tubepoints[index[0]-len1][1]-tubevectors[index[0]-len1][1]*controllerlengths[index[0]-len1][0],tubepoints[index[0]-len1][2]-tubevectors[index[0]-len1][2]*controllerlengths[index[0]-len1][0]];
+                        }
+                    }
+                    points.splice(len2,points.length);
+                    centervectors=[];
+                    centerpoints=tubecenterline(0.05);
+                    tubeprofile(15);
+                    xpos0=xpos;
+                    ypos0=ypos;
+                    ischanging=true;
+                }
+                control3=true;
+            }
+            else if(pancontrol && !control3){
+                let xdir=event.movementX;
+                let ydir=event.movementY;
+                camera[0]=[camera[0][0]-xdir*camera[2][0]/minlen*10+ydir*camera[3][0]/minlen*10,camera[0][1]-xdir*camera[2][1]/minlen*10+ydir*camera[3][1]/minlen*10,camera[0][2]-xdir*camera[2][2]/minlen*10+ydir*camera[3][2]/minlen*10];
+                camera[4]=[camera[4][0]-xdir*camera[2][0]/minlen*10+ydir*camera[3][0]/minlen*10,camera[4][1]-xdir*camera[2][1]/minlen*10+ydir*camera[3][1]/minlen*10,camera[4][2]-xdir*camera[2][2]/minlen*10+ydir*camera[3][2]/minlen*10];
+                ischanging=true;
+                control3=true;
+            }
+        },false);
+        c.addEventListener("mouseup",(event)=>{
+            event.preventDefault();
+            if(event.button==0 && (control2 || pointmotioncontrol) && !control4){
+                control2=false;
+                pointmotioncontrol=false;
+                control4=true;
+                document.body.style.cursor="default";
+            }
+            else if(event.button==1 && pancontrol && !control4){
+                pancontrol=false;
+                control4=true;
+                document.body.style.cursor="default";
+            }
+        },false);
+        c.addEventListener("wheel",(event)=>{
+            event.preventDefault();
+            if(!control5){
+                if(event.deltaY>0){
+                    if(((camera[4][0]-camera[0][0]-0.5*camera[1][0])**2+(camera[4][1]-camera[0][1]-0.5*camera[1][1])**2+(camera[4][2]-camera[0][2]-0.5*camera[1][2])**2)**0.5<50){
+                        camera[0]=[camera[0][0]-0.5*camera[1][0],camera[0][1]-0.5*camera[1][1],camera[0][2]-0.5*camera[1][2]];
+                        ischanging=true;
+                    }
+                }
+                else if(event.deltaY<0){
+                    if(((camera[4][0]-camera[0][0]-0.5*camera[1][0])**2+(camera[4][1]-camera[0][1]-0.5*camera[1][1])**2+(camera[4][2]-camera[0][2]-0.5*camera[1][2])**2)**0.5>1){
+                        camera[0]=[camera[0][0]+0.5*camera[1][0],camera[0][1]+0.5*camera[1][1],camera[0][2]+0.5*camera[1][2]];
+                        ischanging=true;
+                    }
+                }
+                control5=true;
+            }
+        },false);
+        c.addEventListener('contextmenu',(event)=>{
+            event.preventDefault()
+        },false);
+        if(ischanging){
+            points2D();
+            ctx.beginPath();
+            ctx.fillStyle="rgb(255,255,255)";
+            ctx.fillRect(0,0,canvas_x,canvas_y);
+            ctx.strokeStyle="rgb(0,0,0)";
+            ctx.lineWidth=0.4;
+            for(let i=0;i<calculatedallpoints.length;i++){
+                if(i==len2){
+                    ctx.strokeStyle="rgb(250,50,50)";
+                    ctx.lineWidth=1.2;
+                }
+                else if(i==len1){
+                    ctx.strokeStyle="rgb(50,250,50)";
+                    ctx.lineWidth=2.5;
+                }
+                else if(i==0){
+                    ctx.strokeStyle="rgb(255,0,0)";
+                    ctx.lineWidth=1.5;
+                }
+                else if(i==1){
+                    ctx.strokeStyle="rgb(0,255,0)";
+                    ctx.lineWidth=1.5;
+                }
+                else if(i==2){
+                    ctx.strokeStyle="rgb(0,0,255)";
+                    ctx.lineWidth=1.5;
+                }
+                if(calculatedallpoints[i].length>1){
+                    ctx.beginPath();
+                    for(let k=0;k<calculatedallpoints[i].length;k++){
+                        if((k==0 || linecontrol) && calculatedallpoints[i][k]!=null){
+                            ctx.moveTo(calculatedallpoints[i][k][0],calculatedallpoints[i][k][1]);
+                            linecontrol=false;
+                        }
+                        else if(calculatedallpoints[i][k]==null){
+                            ctx.stroke();
+                            ctx.beginPath();
+                            linecontrol=true;
+                        }
+                        else{
+                            if(calculatedallpoints[i][k]!=null){   
+                                ctx.lineTo(calculatedallpoints[i][k][0],calculatedallpoints[i][k][1]);
+                            }
+                            else{
+                                ctx.stroke();
+                                ctx.beginPath();
+                                linecontrol=true;
+                            }
+                        }
+                    }
+                    ctx.stroke();
+                }
+                if(i==len2){
+                    ctx.strokeStyle="rgb(0,0,0)";
+                    ctx.lineWidth=0.4;
+                }
+            }
+            ctx.fillStyle="rgb(50,50,200)";
+            for(let i=len1;i<len2;i++){
+                for(let k=0;k<calculatedallpoints[i].length;k++){
+                    if(calculatedallpoints[i][k]!=null){
+                        ctx.beginPath();
+                        ctx.arc(calculatedallpoints[i][k][0],calculatedallpoints[i][k][1],4,0,2*Math.PI);
+                        ctx.fill();
+                    }
+                }
+            }
+            ischanging=false;
+        }
+        control1=false;
+        control3=false;
+        control4=false;
+        control5=false;
+    }
+    setInterval(update,25);
+</script>
